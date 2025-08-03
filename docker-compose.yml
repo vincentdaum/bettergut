@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: bettergut-postgres
+    environment:
+      POSTGRES_DB: bettergut
+      POSTGRES_USER: bettergut_user
+      POSTGRES_PASSWORD: bettergut_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - bettergut-network
+    restart: unless-stopped
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bettergut-backend
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: bettergut
+      DB_USER: bettergut_user
+      DB_PASSWORD: bettergut_password
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - uploads_data:/app/uploads
+    depends_on:
+      - postgres
+    networks:
+      - bettergut-network
+    restart: unless-stopped
+    command: npm run dev
+
+  # Ollama for Llama 3 LLM
+  ollama:
+    image: ollama/ollama:latest
+    container_name: bettergut-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - bettergut-network
+    restart: unless-stopped
+    # GPU support (uncomment if you have NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # AI Pipeline Service
+  ai-pipeline:
+    build:
+      context: ./ai-pipeline
+      dockerfile: Dockerfile
+    container_name: bettergut-ai-pipeline
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: bettergut
+      POSTGRES_USER: bettergut_user
+      POSTGRES_PASSWORD: bettergut_password
+      OLLAMA_HOST: http://ollama:11434
+      LLAMA_MODEL: llama3:8b
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY}
+      CHROMA_PERSIST_DIR: /app/data/chroma_db
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai-pipeline:/app
+      - ai_data:/app/data
+    depends_on:
+      - postgres
+      - ollama
+    networks:
+      - bettergut-network
+    restart: unless-stopped
+    command: python -m uvicorn api:app --host 0.0.0.0 --port 8001 --reload
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: bettergut-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - bettergut-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Nginx for reverse proxy (production)
+  nginx:
+    image: nginx:alpine
+    container_name: bettergut-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - backend
+      - ai-pipeline
+    networks:
+      - bettergut-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  ollama_data:
+    driver: local
+  ai_data:
+    driver: local
+  uploads_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  bettergut-network:
+    driver: bridge
