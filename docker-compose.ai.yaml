@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  bettergut-ai:
+    build:
+      context: ./ai-pipeline
+      dockerfile: Dockerfile.production
+    container_name: bettergut-ai
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      # Mount storage directory for persistent data
+      - ./ai-pipeline/storage:/app/storage
+      # Mount models cache for faster startup
+      - ai-models-cache:/root/.cache/huggingface
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - STORAGE_BASE=/app/storage
+      - MAX_CRAWL_ARTICLES=100
+      - VECTOR_DB_COLLECTION=gut_health_knowledge
+      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - GPU_MEMORY_FRACTION=0.8
+      - QUANTIZED_MODEL_PATH=/app/storage/models/quantized
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: PostgreSQL for backend data
+  postgres:
+    image: postgres:15
+    container_name: bettergut-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bettergut
+      POSTGRES_USER: bettergut
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your_secure_password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # Optional: Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: bettergut-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  ai-models-cache:
+    driver: local
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  default:
+    name: bettergut-network

@@ -22,6 +22,11 @@ from .pubmed_crawler import PubMedCrawler
 from .institution_crawler import InstitutionCrawler
 from .specialist_crawler import SpecialistCrawler
 
+# Import storage configuration
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+from config.storage_config import StorageConfig
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,14 +34,19 @@ logger = logging.getLogger(__name__)
 class HealthDataCrawler:
     """Main orchestrator for health data collection"""
     
-    def __init__(self, output_dir: str = "./data/crawled"):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, output_dir: str = None):
+        # Use new storage structure
+        if output_dir is None:
+            StorageConfig.create_directories()
+            self.output_dir = StorageConfig.CRAWLED_DATA
+        else:
+            self.output_dir = Path(output_dir)
+            self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize specialized crawlers
-        self.pubmed_crawler = PubMedCrawler()
-        self.institution_crawler = InstitutionCrawler()
-        self.specialist_crawler = SpecialistCrawler()
+        # Initialize specialized crawlers with specific storage paths
+        self.pubmed_crawler = PubMedCrawler(storage_path=StorageConfig.PUBMED_DATA)
+        self.institution_crawler = InstitutionCrawler(storage_path=StorageConfig.INSTITUTIONS_DATA)
+        self.specialist_crawler = SpecialistCrawler(storage_path=StorageConfig.SPECIALISTS_DATA)
         
         # Crawling configuration
         self.session = None
@@ -128,18 +138,44 @@ class HealthDataCrawler:
         return results
     
     async def _save_crawl_results(self, results: Dict[str, List[Dict]]):
-        """Save crawling results to JSON files"""
+        """Save crawling results to JSON files in organized structure"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Map sources to their specific storage directories
+        source_paths = {
+            'pubmed': StorageConfig.PUBMED_DATA,
+            'institutions': StorageConfig.INSTITUTIONS_DATA,
+            'specialists': StorageConfig.SPECIALISTS_DATA
+        }
         
         for source, articles in results.items():
             if articles:
+                storage_path = source_paths.get(source, self.output_dir)
+                storage_path.mkdir(parents=True, exist_ok=True)
+                
                 filename = f"{source}_articles_{timestamp}.json"
-                filepath = self.output_dir / filename
+                filepath = storage_path / filename
                 
                 with open(filepath, 'w', encoding='utf-8') as f:
                     json.dump(articles, f, indent=2, ensure_ascii=False, default=str)
                 
                 logger.info(f"Saved {len(articles)} {source} articles to {filepath}")
+                
+                # Also save a summary file
+                summary = {
+                    'source': source,
+                    'timestamp': timestamp,
+                    'article_count': len(articles),
+                    'topics_covered': list(set([
+                        topic for article in articles 
+                        for topic in article.get('topics', [])
+                    ]))[:10],  # Top 10 topics
+                    'file_path': str(filepath)
+                }
+                
+                summary_path = storage_path / f"{source}_summary_{timestamp}.json"
+                with open(summary_path, 'w', encoding='utf-8') as f:
+                    json.dump(summary, f, indent=2, ensure_ascii=False, default=str)
     
     def get_crawl_statistics(self) -> Dict:
         """Get statistics about crawled data"""

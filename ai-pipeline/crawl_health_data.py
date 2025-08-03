@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Main script to crawl health data and build RAG knowledge base
+Uses organized storage structure for better project management
 """
 import asyncio
 import logging
@@ -14,17 +15,20 @@ sys.path.append(str(Path(__file__).parent))
 try:
     from crawlers.health_crawler import crawl_health_data
     from rag.rag_system import build_knowledge_base
+    from config.storage_config import StorageConfig
 except ImportError as e:
     print(f"Warning: Could not import modules: {e}")
     print("Please install requirements: pip install -r requirements.txt")
     sys.exit(1)
 
 # Configure logging
+StorageConfig.create_directories()  # Ensure directories exist
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('./logs/crawler.log'),
+        logging.FileHandler(StorageConfig.LOGS / 'crawler.log'),
         logging.StreamHandler()
     ]
 )
@@ -42,22 +46,23 @@ async def main():
                        help='Only crawl data, do not build knowledge base')
     parser.add_argument('--build-only', action='store_true',
                        help='Only build knowledge base from existing data')
-    parser.add_argument('--output-dir', default='./data/crawled',
+    parser.add_argument('--output-dir', default=str(StorageConfig.CRAWLED_DATA),
                        help='Output directory for crawled data')
-    parser.add_argument('--rag-db-path', default='./data/chroma_db',
+    parser.add_argument('--rag-db-path', default=str(StorageConfig.VECTOR_DB),
                        help='Path for RAG vector database')
     
     args = parser.parse_args()
     
+    # Show storage structure
+    print("📁 BetterGut AI Pipeline Storage Structure:")
+    StorageConfig.print_structure()
+    
     logger.info("🚀 Starting BetterGut Health Data Pipeline")
     logger.info(f"Topics: {args.topics}")
     logger.info(f"Max articles per source: {args.max_articles}")
+    logger.info(f"Storage base: {StorageConfig.BASE_STORAGE}")
     
-    # Create directories
-    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    Path(args.rag_db_path).mkdir(parents=True, exist_ok=True)
-    Path('./logs').mkdir(parents=True, exist_ok=True)
-    
+    # Directories are already created by StorageConfig
     try:
         # Phase 1: Data Crawling
         if not args.build_only:
