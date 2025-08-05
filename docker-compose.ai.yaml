@@ -1,34 +1,26 @@
 version: '3.8'
 
 services:
-  bettergut-ai:
+  bettergut-crawler-rag:
     build:
-      context: ./ai-pipeline
-      dockerfile: Dockerfile.production
-    container_name: bettergut-ai
+      context: ./RAG_and_crawler
+      dockerfile: Dockerfile
+    container_name: bettergut-crawler-rag
     restart: unless-stopped
     ports:
       - "8001:8001"
     volumes:
       # Mount storage directory for persistent data
-      - ./ai-pipeline/storage:/app/storage
-      # Mount models cache for faster startup
-      - ai-models-cache:/root/.cache/huggingface
+      - ./RAG_and_crawler/storage:/app/storage
+      # Mount crawled data for persistence
+      - crawler-data:/app/data
     environment:
-      - CUDA_VISIBLE_DEVICES=0
       - STORAGE_BASE=/app/storage
       - MAX_CRAWL_ARTICLES=100
       - VECTOR_DB_COLLECTION=gut_health_knowledge
       - EMBEDDING_MODEL=all-MiniLM-L6-v2
-      - GPU_MEMORY_FRACTION=0.8
-      - QUANTIZED_MODEL_PATH=/app/storage/models/quantized
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      - CRAWL_DATA_DIR=/app/data/crawled
+      - VECTOR_DB_PATH=/app/data/chroma_db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
@@ -61,7 +53,7 @@ services:
       - redis-data:/data
 
 volumes:
-  ai-models-cache:
+  crawler-data:
     driver: local
   postgres-data:
     driver: local

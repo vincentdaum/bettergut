@@ -1,23 +1,28 @@
-# BetterGut AI Pipeline
+# BetterGut RAG & Crawler System
 
-Advanced AI-powered gut health insights using RAG (Retrieval-Augmented Generation) and quantized LLMs optimized for RTX 3090.
+**Lightweight data crawling and RAG knowledge base builder** - This container focuses on collecting medical data and building vector databases without heavy LLM dependencies.
 
-## 🗂️ Storage Organization
+## 🎯 Purpose
 
-The project uses a clear, organized storage structure:
+- **Crawl medical data** from 10+ authoritative sources (Mayo Clinic, Harvard, NIH, etc.)
+- **Build RAG knowledge base** using ChromaDB and sentence transformers  
+- **Prepare data** for separate LLM inference system
+- **Monitor progress** through health check API
+- **No GPU requirements** - CPU-only for crawling and embeddings
 
+## 🐳 Quick Start
+
+```bash
+# Start the complete crawling and RAG building process
+docker-compose -f docker-compose.ai.yaml up -d
+
+# Monitor progress
+docker logs -f bettergut-crawler-rag
+
+# Check health and status
+curl http://localhost:8001/health
+curl http://localhost:8001/status
 ```
-storage/
-├── crawled_data/           # All crawled health data
-│   ├── pubmed/            # Scientific articles from PubMed
-│   ├── institutions/      # Government & institutional content
-│   └── specialists/       # Specialist website content
-├── rag_database/          # RAG system data
-│   ├── chroma_db/         # Vector database
-│   └── embeddings_cache/  # Cached embeddings
-├── models/                # AI models
-│   ├── quantized/         # Quantized models for RTX 3090
-│   └── embeddings/        # Embedding models
 ├── logs/                  # Application logs
 └── temp/                  # Temporary files
 ```
